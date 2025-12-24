@@ -10,10 +10,9 @@ const SignupPage = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [userType, setUserType] = useState("business");
+  const [role, setRole] = useState("business");
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
@@ -21,12 +20,12 @@ const SignupPage = () => {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+      const response = await fetch(` http://localhost:5000/api/auth/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ name, email, password, userType })
+        body: JSON.stringify({ name, email, password, role })
       });
 
       const data = await response.json();
@@ -103,20 +102,20 @@ const SignupPage = () => {
               <label>
                 <input
                   type="radio"
-                  value="trucker"
-                  checked={userType === "trucker"}
-                  onChange={(e) => setUserType(e.target.value)}
+                  value="TRUCKER"
+                  checked={role === "TRUCKER"}
+                  onChange={(e) => setRole(e.target.value)}
                 />
                 Trucker
               </label>
-
               <label>
                 <input
                   type="radio"
-                  value="business"
-                  checked={userType === "business"}
-                  onChange={(e) => setUserType(e.target.value)}
+                  value="BUSINESS"
+                  checked={role === "BUSINESS"}
+                  onChange={(e) => setRole(e.target.value)}
                 />
+
                 Business
               </label>
             </div>
