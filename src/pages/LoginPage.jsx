@@ -92,14 +92,14 @@ const LoginPage = () => {
             </div>
           </div>
 
-          <div className="input-group">
+         {/* <div className="input-group">
             <label>I am a:</label>
             <div className="radio-group">
               <label>
                 <input
                   type="radio"
-                  value="trucker"
-                  checked={userType === "trucker"}
+                  value="TRUCKER"
+                  checked={userType === "TRUCKER"}
                   onChange={(e) => setUserType(e.target.value)}
                 />
                 Trucker
@@ -108,14 +108,15 @@ const LoginPage = () => {
               <label>
                 <input
                   type="radio"
-                  value="business"
-                  checked={userType === "business"}
+                  value="BUSINESS"
+                  checked={userType === "BUSINESS"}
                   onChange={(e) => setUserType(e.target.value)}
                 />
                 Business
               </label>
             </div>
           </div>
+          */}
 
           <button type="submit" className="btn-login">
             Log In
