@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { apiRequest } from '../services/api';
+import MapComponent from '../components/MapComponent';
 import './BusinessDashboard.css';
 
 const BusinessDashboard = () => {
@@ -9,6 +10,7 @@ const BusinessDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [trackingLoad, setTrackingLoad] = useState(null);
   
   // New Load Form State
   const [formData, setFormData] = useState({
@@ -19,6 +21,14 @@ const BusinessDashboard = () => {
     weight: "",
     price: "",
     pickupDate: ""
+  });
+
+  const [activeTab, setActiveTab] = useState("active");
+
+  const filteredLoads = loads.filter(load => {
+      const activeStatuses = ["POSTED", "MATCHED", "ASSIGNED", "IN_TRANSIT", "DELIVERED"]; // Keeping DELIVERED in active so user can Close it
+      if (activeTab === "active") return activeStatuses.includes(load.status);
+      return ["CLOSED", "CANCELLED"].includes(load.status);
   });
 
   const fetchData = async () => {
@@ -98,6 +108,16 @@ const BusinessDashboard = () => {
       }
   };
 
+  const handleTrack = async (loadId) => {
+      try {
+          const data = await apiRequest(`/loads/${loadId}`);
+          setTrackingLoad(data);
+          toast.info("Tracking data updated");
+      } catch (err) {
+          toast.error(err.message);
+      }
+  };
+
   if (loading) return <div className="dashboard-container">Loading...</div>;
   if (error) return <div className="dashboard-container">Error: {error}</div>;
 
@@ -130,6 +150,24 @@ const BusinessDashboard = () => {
         </section>
       )}
 
+      {trackingLoad && (
+          <section className="tracking-section" style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '2px solid #00796B' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                <div>
+                    <h2 style={{ margin: 0 }}>Tracking Load: {trackingLoad.load.cargoType}</h2>
+                    <p style={{ margin: '5px 0' }}>Status: <strong>{trackingLoad.load.status}</strong></p>
+                    <p style={{ margin: '5px 0' }}>Trucker: {trackingLoad.load.assignedTo?.name} ({trackingLoad.truckerProfile?.licensePlate || 'N/A'})</p>
+                </div>
+                <button className="btn-sm" onClick={() => setTrackingLoad(null)}>Close Tracker</button>
+              </div>
+              <MapComponent 
+                lat={trackingLoad.truckerProfile?.currentLocation?.coordinates?.[1]} 
+                lng={trackingLoad.truckerProfile?.currentLocation?.coordinates?.[0]} 
+                title="Trucker Last Known Location"
+              />
+          </section>
+      )}
+
       <section className="dashboard-summary">
         <div className="summary-card profile-card">
           <h2>Profile Details</h2>
@@ -152,7 +190,39 @@ const BusinessDashboard = () => {
 
       <main className="dashboard-main">
         <div className="table-container">
-          <h2>Your Posted Loads</h2>
+          <div className="tabs" style={{ marginBottom: '15px', borderBottom: '1px solid #ddd' }}>
+              <button 
+                  onClick={() => setActiveTab("active")}
+                  style={{ 
+                      padding: '10px 20px', 
+                      marginRight: '10px',
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: activeTab === 'active' ? '2px solid #00796B' : 'none',
+                      color: activeTab === 'active' ? '#00796B' : '#666',
+                      fontWeight: activeTab === 'active' ? '600' : '400',
+                      cursor: 'pointer'
+                  }}
+              >
+                  Active Shipments
+              </button>
+              <button 
+                  onClick={() => setActiveTab("history")}
+                  style={{ 
+                      padding: '10px 20px', 
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: activeTab === 'history' ? '2px solid #00796B' : 'none',
+                      color: activeTab === 'history' ? '#00796B' : '#666',
+                      fontWeight: activeTab === 'history' ? '600' : '400',
+                      cursor: 'pointer'
+                  }}
+              >
+                  History
+              </button>
+          </div>
+
+          <h2>{activeTab === 'active' ? 'Active Shipments' : 'Past Shipments'}</h2>
           <table>
             <thead>
               <tr>
@@ -166,7 +236,7 @@ const BusinessDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {loads.map(load => (
+              {filteredLoads.map(load => (
                 <tr key={load._id}>
                   <td>{load.cargoType}</td>
                   <td>{load.origin}</td>
@@ -195,6 +265,11 @@ const BusinessDashboard = () => {
                               Close & Verify
                           </button>
                       )}
+                      {['IN_TRANSIT', 'DELIVERED'].includes(load.status) && (
+                          <button className="btn-sm" onClick={() => handleTrack(load._id)} style={{marginLeft: '5px'}}>
+                              Track
+                          </button>
+                      )}
                       {(load.status === 'POSTED' || load.status === 'MATCHED') && (
                           <button className="btn-sm btn-danger" onClick={() => handleCancel(load._id)} style={{marginLeft: '5px', color: 'red', borderColor: 'red'}}>
                               Cancel
@@ -203,9 +278,9 @@ const BusinessDashboard = () => {
                   </td>
                 </tr>
               ))}
-              {loads.length === 0 && (
+              {filteredLoads.length === 0 && (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center' }}>No loads posted yet.</td>
+                  <td colSpan="7" style={{ textAlign: 'center' }}>No {activeTab} loads found.</td>
                 </tr>
               )}
             </tbody>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { apiRequest } from '../services/api';
+import MapComponent from '../components/MapComponent';
 import './TruckerDashboard.css';
 
 const TruckerDashboard = () => {
@@ -10,11 +11,41 @@ const TruckerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const syncLocation = async (isManual = false) => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        try {
+          await apiRequest("/trucker/location", {
+            method: "PATCH",
+            body: JSON.stringify({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            })
+          });
+          // Refresh profile after sync to get updated coords for the map
+          const profileData = await apiRequest("/trucker/profile/me");
+          setProfile(profileData);
+          if (isManual) {
+            toast.info("Location synced");
+          }
+        } catch (err) {
+          console.error("Location sync failed", err);
+          if (isManual) {
+             toast.error("Failed to sync location");
+          }
+        }
+      });
+    }
+  };
+
   const fetchData = async () => {
     try {
       // Fetch Profile
       const profileData = await apiRequest("/trucker/profile/me");
       setProfile(profileData);
+
+      // Sync location once on load (silent)
+      syncLocation(false);
 
       // Fetch Available Loads
       const loadsData = await apiRequest("/loads/available");
@@ -68,8 +99,8 @@ const TruckerDashboard = () => {
 
   // Derived Data
   const activeJob = myJobs.find(job => ["MATCHED", "ASSIGNED", "IN_TRANSIT"].includes(job.status));
-  const completedJobs = myJobs.filter(job => ["DELIVERED", "CLOSED"].includes(job.status));
-  const totalEarnings = completedJobs.reduce((sum, job) => sum + (job.price || 0), 0);
+  const completedJobs = myJobs.filter(job => ["DELIVERED", "CLOSED", "CANCELLED"].includes(job.status));
+  const totalEarnings = completedJobs.filter(j => j.status === 'CLOSED').reduce((sum, job) => sum + (job.price || 0), 0); // Only count earnings for CLOSED (verified) jobs
 
   if (loading) return <div className="dashboard-container">Loading...</div>;
   if (error) return <div className="dashboard-container">Error: {error}</div>;
@@ -79,8 +110,7 @@ const TruckerDashboard = () => {
       <header className="dashboard-header">
         <h1>Trucker Dashboard</h1>
         <div className="dashboard-actions">
-          <button className="btn-primary">Find New Loads</button>
-          <button className="btn-secondary">My Schedule</button>
+          <button className="btn-primary" onClick={() => document.getElementById('available-loads').scrollIntoView({ behavior: 'smooth' })}>Find New Loads</button>
         </div>
       </header>
 
@@ -93,22 +123,36 @@ const TruckerDashboard = () => {
         </div>
         
         {activeJob ? (
-          <div className="summary-card active-job-card" style={{borderColor: '#28a745'}}>
+          <div className="summary-card active-job-card" style={{borderColor: '#28a745', gridColumn: 'span 2'}}>
             <h2>Current Job: {activeJob.status}</h2>
             <p><strong>To:</strong> {activeJob.destination}</p>
             <p><strong>Pay:</strong> ₹ {activeJob.price}</p>
             
-            {activeJob.status === "ASSIGNED" && (
-                <button className="btn-sm btn-success" onClick={() => handlePickupLoad(activeJob._id)} style={{marginTop: '10px', background: '#007bff', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>
-                  Confirm Pickup
-                </button>
-            )}
+            <div style={{ margin: '15px 0' }}>
+              <MapComponent 
+                lat={profile?.currentLocation?.coordinates?.[1]} 
+                lng={profile?.currentLocation?.coordinates?.[0]} 
+                title="Your Current Location"
+              />
+            </div>
 
-            {activeJob.status === "IN_TRANSIT" && (
-                <button className="btn-sm btn-success" onClick={() => handleDeliverLoad(activeJob._id)} style={{marginTop: '10px', background: '#28a745', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>
-                  Confirm Delivery
+            <div style={{ display: 'flex', gap: '10px' }}>
+                {activeJob.status === "ASSIGNED" && (
+                    <button className="btn-sm btn-success" onClick={() => handlePickupLoad(activeJob._id)} style={{background: '#007bff', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer'}}>
+                    Confirm Pickup
+                    </button>
+                )}
+
+                {activeJob.status === "IN_TRANSIT" && (
+                    <button className="btn-sm btn-success" onClick={() => handleDeliverLoad(activeJob._id)} style={{background: '#28a745', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer'}}>
+                    Confirm Delivery
+                    </button>
+                )}
+
+                <button onClick={() => syncLocation(true)} className="btn-sm" style={{ padding: '8px 15px' }}>
+                    Update GPS
                 </button>
-            )}
+            </div>
 
              {activeJob.status === "MATCHED" && (
                 <small style={{display: 'block', marginTop: '10px', fontSize: '0.8rem', color: '#666'}}>Waiting for Business Approval...</small>
@@ -118,6 +162,7 @@ const TruckerDashboard = () => {
            <div className="summary-card">
             <h2>Active Job</h2>
             <p>None</p>
+            <p style={{fontSize: '0.9rem', fontWeight: 'normal'}}>Search available loads below</p>
           </div>
         )}
 
@@ -126,12 +171,12 @@ const TruckerDashboard = () => {
           <p>{completedJobs.length}</p>
         </div>
         <div className="summary-card">
-          <h2>Total Earnings</h2>
+          <h2>Verified Earnings</h2>
           <p>₹ {totalEarnings.toLocaleString()}</p>
         </div>
       </section>
 
-      <main className="dashboard-main">
+      <main className="dashboard-main" id="available-loads">
         <div className="table-container">
           <h2>Available Loads Near You</h2>
           <table>
@@ -154,12 +199,15 @@ const TruckerDashboard = () => {
                   <td>₹ {load.price}</td>
                   <td>{load.weight} Tons</td>
                   <td>
-                    <button 
-                      className="btn-sm" 
-                      onClick={() => handleAcceptLoad(load._id)}
-                    >
-                      Request Load
-                    </button>
+                    {!activeJob && (
+                        <button 
+                        className="btn-sm" 
+                        onClick={() => handleAcceptLoad(load._id)}
+                        >
+                        Request Load
+                        </button>
+                    )}
+                    {activeJob && <span className="text-muted" style={{fontSize: '0.8rem'}}>Finish current job first</span>}
                   </td>
                 </tr>
               ))}
@@ -171,6 +219,32 @@ const TruckerDashboard = () => {
             </tbody>
           </table>
         </div>
+
+        {completedJobs.length > 0 && (
+            <div className="table-container" style={{ marginTop: '30px' }}>
+            <h2>Job History</h2>
+            <table>
+                <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Route</th>
+                    <th>Status</th>
+                    <th>Earnings</th>
+                </tr>
+                </thead>
+                <tbody>
+                {completedJobs.map(job => (
+                    <tr key={job._id}>
+                    <td>{new Date(job.updatedAt).toLocaleDateString()}</td>
+                    <td>{job.origin} → {job.destination}</td>
+                    <td><span className={`status-badge ${job.status.toLowerCase()}`}>{job.status}</span></td>
+                    <td>₹ {job.status === 'CLOSED' ? job.price : 0}</td>
+                    </tr>
+                ))}
+                </tbody>
+            </table>
+            </div>
+        )}
       </main>
 
       <footer className="dashboard-footer">
