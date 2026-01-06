@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
+import { apiRequest } from '../services/api';
 import './BusinessDashboard.css';
-
-const API_BASE_URL = "http://localhost:5000/api";
 
 const BusinessDashboard = () => {
   const [profile, setProfile] = useState(null);
@@ -16,6 +15,7 @@ const BusinessDashboard = () => {
     origin: "",
     destination: "",
     cargoType: "",
+    vehicleTypeRequired: "",
     weight: "",
     price: "",
     pickupDate: ""
@@ -23,19 +23,12 @@ const BusinessDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch Profile
-      const profileRes = await fetch(`${API_BASE_URL}/business/profile/me`, { headers });
-      if (!profileRes.ok) throw new Error("Failed to fetch profile");
-      const profileData = await profileRes.json();
+      const profileData = await apiRequest("/business/profile/me");
       setProfile(profileData);
 
       // Fetch My Loads
-      const loadsRes = await fetch(`${API_BASE_URL}/loads/my-loads`, { headers });
-      if (!loadsRes.ok) throw new Error("Failed to fetch loads");
-      const loadsData = await loadsRes.json();
+      const loadsData = await apiRequest("/loads/my-loads");
       setLoads(loadsData);
 
     } catch (err) {
@@ -57,17 +50,10 @@ const BusinessDashboard = () => {
   const handleSubmitLoad = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/loads`, {
+      await apiRequest("/loads", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
         body: JSON.stringify(formData)
       });
-
-      if (!response.ok) throw new Error("Failed to post load");
 
       toast.success("Load posted successfully!");
       setShowForm(false);
@@ -76,6 +62,40 @@ const BusinessDashboard = () => {
     } catch (err) {
       toast.error(err.message);
     }
+  };
+
+  const handleAssign = async (loadId, truckerId) => {
+      try {
+          await apiRequest(`/loads/${loadId}/assign`, {
+              method: "PATCH",
+              body: JSON.stringify({ truckerId }) // In this simple flow, backend knows the matched trucker, but good to be explicit if we had multiple applicants
+          });
+          toast.success("Trucker assigned!");
+          fetchData();
+      } catch (err) {
+          toast.error(err.message);
+      }
+  };
+
+  const handleClose = async (loadId) => {
+      try {
+          await apiRequest(`/loads/${loadId}/close`, { method: "PATCH" });
+          toast.success("Load closed!");
+          fetchData();
+      } catch (err) {
+          toast.error(err.message);
+      }
+  };
+
+  const handleCancel = async (loadId) => {
+      if(!window.confirm("Are you sure you want to cancel this load?")) return;
+      try {
+          await apiRequest(`/loads/${loadId}/cancel`, { method: "PATCH" });
+          toast.info("Load cancelled.");
+          fetchData();
+      } catch (err) {
+          toast.error(err.message);
+      }
   };
 
   if (loading) return <div className="dashboard-container">Loading...</div>;
@@ -100,7 +120,8 @@ const BusinessDashboard = () => {
               <input name="origin" placeholder="Origin (e.g. Mumbai)" onChange={handleInputChange} required />
               <input name="destination" placeholder="Destination (e.g. Delhi)" onChange={handleInputChange} required />
               <input name="cargoType" placeholder="Cargo Type (e.g. Electronics)" onChange={handleInputChange} required />
-              <input name="weight" type="number" placeholder="Weight (Tons)" onChange={handleInputChange} required />
+              <input name="vehicleTypeRequired" placeholder="Required Truck Type (e.g. Semi-Truck)" onChange={handleInputChange} required />
+              <input name="weight" type="number" placeholder="Max Weight (Tons)" onChange={handleInputChange} required />
               <input name="price" type="number" placeholder="Price (₹)" onChange={handleInputChange} required />
               <input name="pickupDate" type="date" onChange={handleInputChange} required />
             </div>
@@ -120,12 +141,12 @@ const BusinessDashboard = () => {
           <p>{loads.length}</p>
         </div>
         <div className="summary-card">
-          <h2>Pending</h2>
-          <p>{loads.filter(l => l.status === 'PENDING').length}</p>
+          <h2>Active</h2>
+          <p>{loads.filter(l => ['POSTED','MATCHED','ASSIGNED','IN_TRANSIT'].includes(l.status)).length}</p>
         </div>
         <div className="summary-card">
-          <h2>In Transit</h2>
-          <p>{loads.filter(l => l.status === 'IN_TRANSIT').length}</p>
+          <h2>Completed</h2>
+          <p>{loads.filter(l => l.status === 'CLOSED').length}</p>
         </div>
       </section>
 
@@ -139,6 +160,7 @@ const BusinessDashboard = () => {
                 <th>Origin</th>
                 <th>Destination</th>
                 <th>Status</th>
+                <th>Assigned Trucker</th>
                 <th>Price</th>
                 <th>Actions</th>
               </tr>
@@ -150,13 +172,40 @@ const BusinessDashboard = () => {
                   <td>{load.origin}</td>
                   <td>{load.destination}</td>
                   <td><span className={`status-badge ${load.status.toLowerCase()}`}>{load.status}</span></td>
+                  <td>
+                    {load.assignedTo ? (
+                      <div>
+                        <strong>{load.assignedTo.name}</strong>
+                        <br />
+                        <small>{load.assignedTo.email}</small>
+                      </div>
+                    ) : (
+                      <span className="text-muted">Pending</span>
+                    )}
+                  </td>
                   <td>₹ {load.price}</td>
-                  <td><button className="btn-sm">Details</button></td>
+                  <td>
+                      {load.status === 'MATCHED' && (
+                          <button className="btn-sm btn-action" onClick={() => handleAssign(load._id, load.assignedTo._id)}>
+                              Confirm Assignment
+                          </button>
+                      )}
+                      {load.status === 'DELIVERED' && (
+                          <button className="btn-sm btn-action" onClick={() => handleClose(load._id)}>
+                              Close & Verify
+                          </button>
+                      )}
+                      {(load.status === 'POSTED' || load.status === 'MATCHED') && (
+                          <button className="btn-sm btn-danger" onClick={() => handleCancel(load._id)} style={{marginLeft: '5px', color: 'red', borderColor: 'red'}}>
+                              Cancel
+                          </button>
+                      )}
+                  </td>
                 </tr>
               ))}
               {loads.length === 0 && (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center' }}>No loads posted yet.</td>
+                  <td colSpan="7" style={{ textAlign: 'center' }}>No loads posted yet.</td>
                 </tr>
               )}
             </tbody>

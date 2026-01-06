@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { apiRequest } from "../services/api";
 import "./LoginPage.css";
 import EyeIcon from "../assets/icons/eye.svg";
 import EyeOffIcon from "../assets/icons/eye-off.svg";
-
-const API_BASE_URL = "http://localhost:5000/api";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -20,19 +19,10 @@ const LoginPage = () => {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const data = await apiRequest("/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
         body: JSON.stringify({ email, password })
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to log in");
-      }
 
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.user.role);

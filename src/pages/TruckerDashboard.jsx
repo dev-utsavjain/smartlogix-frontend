@@ -1,31 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
+import { apiRequest } from '../services/api';
 import './TruckerDashboard.css';
-
-const API_BASE_URL = "http://localhost:5000/api";
 
 const TruckerDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [availableLoads, setAvailableLoads] = useState([]);
+  const [myJobs, setMyJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch Profile
-      const profileRes = await fetch(`${API_BASE_URL}/trucker/profile/me`, { headers });
-      if (!profileRes.ok) throw new Error("Failed to fetch profile");
-      const profileData = await profileRes.json();
+      const profileData = await apiRequest("/trucker/profile/me");
       setProfile(profileData);
 
       // Fetch Available Loads
-      const loadsRes = await fetch(`${API_BASE_URL}/loads/available`, { headers });
-      if (!loadsRes.ok) throw new Error("Failed to fetch available loads");
-      const loadsData = await loadsRes.json();
+      const loadsData = await apiRequest("/loads/available");
       setAvailableLoads(loadsData);
+
+      // Fetch My Jobs (Active & Completed)
+      const jobsData = await apiRequest("/loads/my-jobs");
+      setMyJobs(jobsData);
 
     } catch (err) {
       setError(err.message);
@@ -41,26 +38,38 @@ const TruckerDashboard = () => {
 
   const handleAcceptLoad = async (loadId) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/loads/${loadId}/accept`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Failed to accept load");
-      }
-
-      toast.success("Load accepted! Safe travels.");
+      await apiRequest(`/loads/${loadId}/accept`, { method: "PATCH" });
+      toast.success("Interest registered! Waiting for business approval.");
       fetchData(); // Refresh the list
     } catch (err) {
       toast.error(err.message);
     }
   };
+
+  const handlePickupLoad = async (loadId) => {
+    try {
+      await apiRequest(`/loads/${loadId}/pickup`, { method: "PATCH" });
+      toast.success("Load picked up! Drive safe.");
+      fetchData();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleDeliverLoad = async (loadId) => {
+    try {
+      await apiRequest(`/loads/${loadId}/deliver`, { method: "PATCH" });
+      toast.success("Load delivered! Waiting for verification.");
+      fetchData();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // Derived Data
+  const activeJob = myJobs.find(job => ["MATCHED", "ASSIGNED", "IN_TRANSIT"].includes(job.status));
+  const completedJobs = myJobs.filter(job => ["DELIVERED", "CLOSED"].includes(job.status));
+  const totalEarnings = completedJobs.reduce((sum, job) => sum + (job.price || 0), 0);
 
   if (loading) return <div className="dashboard-container">Loading...</div>;
   if (error) return <div className="dashboard-container">Error: {error}</div>;
@@ -82,17 +91,43 @@ const TruckerDashboard = () => {
           <p><strong>Capacity:</strong> {profile?.capacity} Tons</p>
           <p><strong>Base:</strong> {profile?.currentLocation?.city}</p>
         </div>
+        
+        {activeJob ? (
+          <div className="summary-card active-job-card" style={{borderColor: '#28a745'}}>
+            <h2>Current Job: {activeJob.status}</h2>
+            <p><strong>To:</strong> {activeJob.destination}</p>
+            <p><strong>Pay:</strong> ₹ {activeJob.price}</p>
+            
+            {activeJob.status === "ASSIGNED" && (
+                <button className="btn-sm btn-success" onClick={() => handlePickupLoad(activeJob._id)} style={{marginTop: '10px', background: '#007bff', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>
+                  Confirm Pickup
+                </button>
+            )}
+
+            {activeJob.status === "IN_TRANSIT" && (
+                <button className="btn-sm btn-success" onClick={() => handleDeliverLoad(activeJob._id)} style={{marginTop: '10px', background: '#28a745', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>
+                  Confirm Delivery
+                </button>
+            )}
+
+             {activeJob.status === "MATCHED" && (
+                <small style={{display: 'block', marginTop: '10px', fontSize: '0.8rem', color: '#666'}}>Waiting for Business Approval...</small>
+            )}
+          </div>
+        ) : (
+           <div className="summary-card">
+            <h2>Active Job</h2>
+            <p>None</p>
+          </div>
+        )}
+
         <div className="summary-card">
-          <h2>Available Loads</h2>
-          <p>{availableLoads.length}</p>
-        </div>
-        <div className="summary-card">
-          <h2>Active Job</h2>
-          <p>None</p>
+          <h2>Completed Trips</h2>
+          <p>{completedJobs.length}</p>
         </div>
         <div className="summary-card">
           <h2>Total Earnings</h2>
-          <p>₹ 0</p>
+          <p>₹ {totalEarnings.toLocaleString()}</p>
         </div>
       </section>
 
@@ -123,7 +158,7 @@ const TruckerDashboard = () => {
                       className="btn-sm" 
                       onClick={() => handleAcceptLoad(load._id)}
                     >
-                      Accept
+                      Request Load
                     </button>
                   </td>
                 </tr>

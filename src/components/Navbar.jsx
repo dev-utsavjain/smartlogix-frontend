@@ -13,7 +13,10 @@ const Navbar = () => {
     navigate("/");
   };
 
-  const dashboardLink = role === "BUSINESS" ? "/business-dashboard" : "/trucker-dashboard";
+  const dashboardLink = 
+    role === "BUSINESS" ? "/business-dashboard" : 
+    role === "TRUCKER" ? "/trucker-dashboard" : 
+    "/admin-dashboard";
 
   return (
     <nav className="navbar">

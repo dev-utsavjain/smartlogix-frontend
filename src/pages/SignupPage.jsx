@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { apiRequest } from "../services/api";
 import "./SignupPage.css";
 import EyeIcon from "../assets/icons/eye.svg";
 import EyeOffIcon from "../assets/icons/eye-off.svg";
-
-const API_BASE_URL = "http://localhost:5000/api";
 
 const SignupPage = () => {
   // Step 1 State
@@ -57,24 +56,16 @@ const SignupPage = () => {
 
     try {
       // 1. Register User
-      const signupRes = await fetch(`${API_BASE_URL}/auth/signup`, {
+      await apiRequest("/auth/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password, role }),
       });
 
-      const signupData = await signupRes.json();
-      if (!signupRes.ok) throw new Error(signupData.message || "Signup failed");
-
       // 2. Login User
-      const loginRes = await fetch(`${API_BASE_URL}/auth/login`, {
+      const loginData = await apiRequest("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-
-      const loginData = await loginRes.json();
-      if (!loginRes.ok) throw new Error(loginData.message || "Login failed");
 
       const token = loginData.token;
       localStorage.setItem("token", token);
@@ -96,7 +87,7 @@ const SignupPage = () => {
             state: profileData.state,
           },
         };
-      } else {
+      } else if (role === "TRUCKER") {
         endpoint = "/trucker/profile";
         profilePayload = {
           vehicleType: profileData.vehicleType,
@@ -107,25 +98,22 @@ const SignupPage = () => {
         };
       }
 
-      const profileRes = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(profilePayload),
-      });
-
-      const profileResData = await profileRes.json();
-      if (!profileRes.ok) throw new Error(profileResData.message || "Profile creation failed");
+      if (endpoint) {
+        await apiRequest(endpoint, {
+          method: "POST",
+          body: JSON.stringify(profilePayload),
+        });
+      }
 
       toast.success("Account created successfully!");
 
       // 4. Redirect
       if (role === "BUSINESS") {
         navigate("/business-dashboard");
-      } else {
+      } else if (role === "TRUCKER") {
         navigate("/trucker-dashboard");
+      } else {
+        navigate("/");
       }
     } catch (err) {
       setError(err.message);

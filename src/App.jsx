@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import BusinessDashboard from './pages/BusinessDashboard';
 import TruckerDashboard from './pages/TruckerDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import ContactPage from './pages/ContactPage';
 import './App.css';
 
@@ -36,6 +37,15 @@ function App() {
           element={
             <ProtectedRoute allowedRole="TRUCKER">
               <TruckerDashboard />
+            </ProtectedRoute>
+          } 
+        />
+
+        <Route 
+          path="/admin-dashboard" 
+          element={
+            <ProtectedRoute allowedRole="ADMIN">
+              <AdminDashboard />
             </ProtectedRoute>
           } 
         />
